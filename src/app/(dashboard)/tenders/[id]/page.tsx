@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -38,11 +38,7 @@ export default function TenderDetailPage() {
 
   const tenderId = params.id as string;
 
-  useEffect(() => {
-    fetchTender();
-  }, [tenderId]);
-
-  async function fetchTender() {
+  const fetchTender = useCallback(async () => {
     try {
       const res = await fetch(`/api/tenders/${tenderId}`);
       const data = await res.json();
@@ -52,7 +48,11 @@ export default function TenderDetailPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenderId]);
+
+  useEffect(() => {
+    fetchTender();
+  }, [fetchTender]);
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -421,7 +421,7 @@ export default function TenderDetailPage() {
                 <div>
                   <h4 className="text-sm font-medium mb-1 flex items-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                    Risico's
+                    Risico&apos;s
                   </h4>
                   <p className="text-sm text-muted-foreground">{tender.context.risks}</p>
                 </div>
