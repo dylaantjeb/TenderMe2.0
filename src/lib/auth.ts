@@ -4,12 +4,16 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 
+const hasDatabase = !!process.env.DATABASE_URL;
+
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(db),
+  // Only use PrismaAdapter when database is available
+  ...(hasDatabase ? { adapter: PrismaAdapter(db) } : {}),
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  secret: process.env.NEXTAUTH_SECRET || 'development-secret-change-in-production',
   pages: {
     signIn: '/login',
     newUser: '/register',
@@ -22,6 +26,10 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Wachtwoord', type: 'password' },
       },
       async authorize(credentials) {
+        if (!hasDatabase) {
+          throw new Error('Database is niet geconfigureerd');
+        }
+
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Email en wachtwoord zijn verplicht');
         }

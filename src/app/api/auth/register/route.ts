@@ -13,6 +13,13 @@ const registerSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json(
+        { error: 'Database is niet geconfigureerd. Stel DATABASE_URL in via de Vercel omgevingsvariabelen.' },
+        { status: 503 }
+      );
+    }
+
     const body = await req.json();
     const validated = registerSchema.parse(body);
 
@@ -66,9 +73,13 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    console.error('Registration error:', error);
+    const message = error instanceof Error ? error.message : 'Onbekende fout';
+    console.error('Registration error:', message);
     return NextResponse.json(
-      { error: 'Er is een fout opgetreden bij het registreren' },
+      { error: message.includes('DATABASE_URL')
+          ? 'Database is niet geconfigureerd. Stel DATABASE_URL in via de Vercel omgevingsvariabelen.'
+          : 'Er is een fout opgetreden bij het registreren'
+      },
       { status: 500 }
     );
   }
