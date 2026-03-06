@@ -75,12 +75,21 @@ export async function POST(req: NextRequest) {
     }
     const message = error instanceof Error ? error.message : 'Onbekende fout';
     console.error('Registration error:', message);
+
+    let userMessage = 'Er is een fout opgetreden bij het registreren';
+    let status = 500;
+
+    if (message.includes('DATABASE_URL')) {
+      userMessage = 'Database is niet geconfigureerd. Stel DATABASE_URL in via de Vercel omgevingsvariabelen.';
+      status = 503;
+    } else if (message.includes('does not exist') || message.includes('relation') || message.includes('P2021')) {
+      userMessage = 'Database tabellen bestaan nog niet. Ga naar /api/setup om de database te initialiseren.';
+      status = 503;
+    }
+
     return NextResponse.json(
-      { error: message.includes('DATABASE_URL')
-          ? 'Database is niet geconfigureerd. Stel DATABASE_URL in via de Vercel omgevingsvariabelen.'
-          : 'Er is een fout opgetreden bij het registreren'
-      },
-      { status: 500 }
+      { error: userMessage },
+      { status }
     );
   }
 }
