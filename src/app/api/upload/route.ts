@@ -3,8 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { parseDocument } from '@/lib/ingestion/parser';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { randomUUID } from 'crypto';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -44,19 +42,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Read file buffer
+    // Read file buffer (in-memory only — Vercel has no writable filesystem)
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Store file
-    const uploadDir = join(process.cwd(), 'uploads', session.user.id);
-    await mkdir(uploadDir, { recursive: true });
     const fileId = randomUUID();
     const ext = file.name.split('.').pop() || 'bin';
-    const storagePath = join(uploadDir, `${fileId}.${ext}`);
-    await writeFile(storagePath, buffer);
 
-    // Parse document
+    // Parse document to extract text
     const parsed = await parseDocument(buffer, file.name, file.type || `.${ext}`);
 
     // Create or get tender
@@ -74,14 +67,14 @@ export async function POST(req: NextRequest) {
       currentTenderId = tender.id;
     }
 
-    // Store document record
+    // Store document record (text in DB, no file on disk)
     const document = await db.document.create({
       data: {
         tenderId: currentTenderId,
         fileName: file.name,
         fileType: ext,
         fileSize: file.size,
-        storagePath,
+        storagePath: `memory://${fileId}.${ext}`,
         extractedText: parsed.text,
         ocrApplied: parsed.metadata.ocrApplied,
         metadata: parsed.metadata as any,
