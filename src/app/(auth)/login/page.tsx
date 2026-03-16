@@ -68,9 +68,14 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Wachtwoord
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  Wachtwoord
+                </label>
+                <Link href="/reset-password" className="text-xs text-primary hover:underline">
+                  Wachtwoord vergeten?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

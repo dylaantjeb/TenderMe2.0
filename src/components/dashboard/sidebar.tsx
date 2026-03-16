@@ -9,18 +9,37 @@ import {
   FolderOpen,
   Settings,
   Users,
-  BarChart3,
+  BookOpen,
+  Import,
   LogOut,
   Shield,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { useThemeStore } from '@/hooks/use-tender-store';
 
 const navigation = [
   { name: 'Dashboard', href: '/tenders', icon: LayoutDashboard },
   { name: 'Tenders', href: '/tenders', icon: FolderOpen },
+  { name: 'Importeren', href: '/import', icon: Import },
+  { name: 'Kennisbank', href: '/knowledge', icon: BookOpen },
   { name: 'Team', href: '/team', icon: Users },
   { name: 'Instellingen', href: '/settings', icon: Settings },
 ];
+
+function ThemeToggle() {
+  const { theme, setTheme } = useThemeStore();
+  return (
+    <button
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors w-full"
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}
+    </button>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -65,6 +84,7 @@ export function Sidebar() {
           <Shield className="h-3.5 w-3.5" />
           <span>GDPR Compliant</span>
         </div>
+        <ThemeToggle />
         <button
           onClick={() => signOut({ callbackUrl: '/' })}
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors w-full"

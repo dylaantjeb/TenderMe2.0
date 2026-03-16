@@ -83,6 +83,7 @@ model User {
   responses     TenderResponse[]
   auditLogs     AuditLog[]
   aiUsageLogs   AIUsageLog[]
+  evidenceItems EvidenceItem[]
 
   @@index([organizationId])
   @@index([email])
@@ -102,9 +103,10 @@ model Organization {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  users    User[]
-  tenders  Tender[]
-  apiKeys  ApiKey[]
+  users         User[]
+  tenders       Tender[]
+  apiKeys       ApiKey[]
+  evidenceItems EvidenceItem[]
 }
 
 model ApiKey {
@@ -388,4 +390,45 @@ model AIUsageLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+// ============================================
+// KNOWLEDGE & EVIDENCE LIBRARY
+// ============================================
+
+enum EvidenceCategory {
+  COMPANY_PROFILE
+  CERTIFICATION
+  REFERENCE_CASE
+  KPI_ACHIEVEMENT
+  METHODOLOGY
+  STAFFING
+  SECURITY_COMPLIANCE
+  GOVERNANCE
+  SUSTAINABILITY
+  OTHER
+}
+
+model EvidenceItem {
+  id             String           @id @default(cuid())
+  organizationId String
+  category       EvidenceCategory @default(OTHER)
+  title          String
+  content        String           @db.Text
+  tags           String?          // comma-separated for simple search
+  validFrom      DateTime?
+  validUntil     DateTime?
+  isActive       Boolean          @default(true)
+  usageCount     Int              @default(0)
+  metadata       Json?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator      User         @relation(fields: [createdBy], references: [id])
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([isActive])
 }

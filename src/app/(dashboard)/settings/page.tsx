@@ -1,22 +1,83 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  Settings,
   Shield,
   CreditCard,
-  Bell,
   Key,
   Building,
-  Users,
   Globe,
+  Loader2,
+  Check,
 } from 'lucide-react';
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
+  const [orgName, setOrgName] = useState('');
+  const [sector, setSector] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function loadOrg() {
+      try {
+        const res = await fetch('/api/settings/organization');
+        if (res.ok) {
+          const data = await res.json();
+          setOrgName(data.name || '');
+          setSector(data.sector || '');
+        }
+      } catch {
+        // silently fail on load
+      }
+    }
+    loadOrg();
+  }, []);
+
+  async function handleSaveOrg() {
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      const res = await fetch('/api/settings/organization', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: orgName, sector }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Opslaan mislukt');
+      } else {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch {
+      setError('Opslaan mislukt');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const tierLabel = session?.user?.tier || 'FREE';
+  const tierDisplay: Record<string, string> = {
+    FREE: 'Free Plan',
+    STARTER: 'Starter Plan',
+    PRO: 'Professional Plan',
+    ENTERPRISE: 'Enterprise Plan',
+  };
+  const tierLimits: Record<string, string> = {
+    FREE: '2 tenders per maand, 1 gebruiker',
+    STARTER: '5 tenders per maand, 1 gebruiker',
+    PRO: '25 tenders per maand, 5 gebruikers',
+    ENTERPRISE: 'Onbeperkt tenders, onbeperkt gebruikers',
+  };
+
   return (
     <div className="max-w-4xl">
       <div className="mb-8">
@@ -35,17 +96,34 @@ export default function SettingsPage() {
             <CardDescription>Organisatie-instellingen en informatie</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Organisatienaam</label>
-                <Input placeholder="Uw organisatie" />
+                <Input
+                  placeholder="Uw organisatie"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Sector</label>
-                <Input placeholder="bijv. ICT, Bouw, Consultancy" />
+                <Input
+                  placeholder="bijv. ICT, Bouw, Consultancy"
+                  value={sector}
+                  onChange={(e) => setSector(e.target.value)}
+                />
               </div>
             </div>
-            <Button>Opslaan</Button>
+            <Button onClick={handleSaveOrg} disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saved && <Check className="mr-2 h-4 w-4" />}
+              {saved ? 'Opgeslagen' : 'Opslaan'}
+            </Button>
           </CardContent>
         </Card>
 
@@ -62,14 +140,14 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between p-4 rounded-lg border">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold">Free Plan</span>
+                  <span className="font-semibold">{tierDisplay[tierLabel] || tierLabel}</span>
                   <Badge variant="secondary">Huidig</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  2 tenders per maand, 1 gebruiker
+                  {tierLimits[tierLabel] || ''}
                 </p>
               </div>
-              <Button>Upgraden</Button>
+              {tierLabel !== 'ENTERPRISE' && <Button>Upgraden</Button>}
             </div>
           </CardContent>
         </Card>

@@ -5,8 +5,13 @@ const protectedPaths = [
   '/tenders',
   '/settings',
   '/team',
+  '/import',
+  '/knowledge',
   '/api/tenders',
   '/api/upload',
+  '/api/team',
+  '/api/settings',
+  '/api/knowledge',
 ];
 
 export async function middleware(req: NextRequest) {
@@ -55,7 +60,12 @@ export const config = {
     '/tenders/:path*',
     '/settings/:path*',
     '/team/:path*',
+    '/import/:path*',
+    '/knowledge/:path*',
     '/api/tenders/:path*',
     '/api/upload/:path*',
+    '/api/team/:path*',
+    '/api/settings/:path*',
+    '/api/knowledge/:path*',
   ],
 };
