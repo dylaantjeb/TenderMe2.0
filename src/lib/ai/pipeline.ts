@@ -85,30 +85,32 @@ export async function analyzeCriteria(
   for (const criterion of extracted.criteria) {
     const created = await db.criterion.create({
       data: {
-        tenderId,
+        tender: { connect: { id: tenderId } },
         name: criterion.name,
-        description: criterion.description,
-        type: criterion.type as any,
-        weight: criterion.weight,
-        maxScore: criterion.maxScore,
-        isKnockout: criterion.isKnockout,
-        knockoutReq: criterion.knockoutRequirement,
-        scoringMethod: extracted.scoringMethodology,
+        description: criterion.description || '',
+        type: (criterion.type as any) || 'QUALITY',
+        weight: criterion.weight ?? 0,
+        maxScore: criterion.maxScore ?? 10,
+        isKnockout: criterion.isKnockout ?? false,
+        knockoutReq: criterion.knockoutRequirement || null,
+        scoringMethod: extracted.scoringMethodology || null,
       },
     });
 
     // Create sub-criteria
-    for (const sub of criterion.subCriteria) {
-      await db.criterion.create({
-        data: {
-          tenderId,
-          name: sub.name,
-          description: sub.description,
-          type: criterion.type as any,
-          weight: sub.weight,
-          parentId: created.id,
-        },
-      });
+    if (criterion.subCriteria?.length) {
+      for (const sub of criterion.subCriteria) {
+        await db.criterion.create({
+          data: {
+            tender: { connect: { id: tenderId } },
+            name: sub.name,
+            description: sub.description || '',
+            type: (criterion.type as any) || 'QUALITY',
+            weight: sub.weight ?? 0,
+            parent: { connect: { id: created.id } },
+          },
+        });
+      }
     }
   }
 
