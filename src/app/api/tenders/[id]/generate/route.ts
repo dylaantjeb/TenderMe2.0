@@ -56,16 +56,18 @@ export async function POST(
       data: result,
     });
   } catch (error) {
-    console.error('Generate responses error:', error);
+    const message = error instanceof Error ? error.message : 'Onbekende fout';
+    console.error('Generate responses error:', message, error);
 
     await db.tender.update({
       where: { id: params.id },
       data: { status: 'CRITERIA_EXTRACTED' },
     }).catch(() => {});
 
+    const isConfigError = message.includes('niet geconfigureerd') || message.includes('API_KEY');
     return NextResponse.json(
-      { error: 'Fout bij genereren van antwoorden' },
-      { status: 500 }
+      { error: isConfigError ? message : `Generatie fout: ${message}` },
+      { status: isConfigError ? 503 : 500 }
     );
   }
 }

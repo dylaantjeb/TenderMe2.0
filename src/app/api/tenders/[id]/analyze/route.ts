@@ -88,7 +88,8 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error('Analyze tender error:', error);
+    const message = error instanceof Error ? error.message : 'Onbekende fout';
+    console.error('Analyze tender error:', message, error);
 
     // Reset status on error
     await db.tender.update({
@@ -96,9 +97,11 @@ export async function POST(
       data: { status: 'DRAFT' },
     }).catch(() => {});
 
+    // Surface API key errors clearly
+    const isConfigError = message.includes('niet geconfigureerd') || message.includes('API_KEY');
     return NextResponse.json(
-      { error: 'Fout bij analyseren van de tender' },
-      { status: 500 }
+      { error: isConfigError ? message : `Analyse fout: ${message}` },
+      { status: isConfigError ? 503 : 500 }
     );
   }
 }

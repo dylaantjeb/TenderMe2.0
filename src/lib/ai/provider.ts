@@ -5,6 +5,9 @@ let openaiClient: OpenAI | null = null;
 let anthropicClient: Anthropic | null = null;
 
 export function getOpenAI(): OpenAI {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is niet geconfigureerd. Stel deze in via de Vercel omgevingsvariabelen.');
+  }
   if (!openaiClient) {
     openaiClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -14,6 +17,9 @@ export function getOpenAI(): OpenAI {
 }
 
 export function getAnthropic(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is niet geconfigureerd. Stel deze in via de Vercel omgevingsvariabelen.');
+  }
   if (!anthropicClient) {
     anthropicClient = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
