@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/tenders/[id]/analyze/route.ts": {
+      "maxDuration": 120
+    },
+    "src/app/api/tenders/[id]/generate/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

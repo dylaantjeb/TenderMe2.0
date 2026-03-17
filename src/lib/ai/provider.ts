@@ -43,11 +43,38 @@ const DEFAULT_MODELS = {
   anthropic: 'claude-sonnet-4-20250514',
 } as const;
 
+/**
+ * Determine the best available provider.
+ * Hybrid strategy:
+ *   - 'analysis' role → prefer OpenAI (structured extraction, scoring)
+ *   - 'generation' role → prefer Anthropic/Claude (long-form EMVI text)
+ * Falls back to whichever key is available.
+ */
+export function resolveProvider(preferred?: AIProvider, role?: 'analysis' | 'generation'): AIProvider {
+  if (preferred) {
+    // Verify the preferred provider's key exists
+    if (preferred === 'openai' && process.env.OPENAI_API_KEY) return 'openai';
+    if (preferred === 'anthropic' && process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  }
+
+  // Hybrid: pick best provider by role
+  if (role === 'analysis' && process.env.OPENAI_API_KEY) return 'openai';
+  if (role === 'generation' && process.env.ANTHROPIC_API_KEY) return 'anthropic';
+
+  // Fallback: use whichever is available
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+
+  throw new Error(
+    'Geen AI provider geconfigureerd. Stel ANTHROPIC_API_KEY en/of OPENAI_API_KEY in via de Vercel omgevingsvariabelen.'
+  );
+}
+
 export async function aiComplete(
   prompt: string,
-  options: AICompletionOptions = {}
+  options: AICompletionOptions & { role?: 'analysis' | 'generation' } = {}
 ): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const provider = options.provider || 'anthropic';
+  const provider = resolveProvider(options.provider, options.role);
   const model = options.model || DEFAULT_MODELS[provider];
   const temperature = options.temperature ?? 0.3;
   const maxTokens = options.maxTokens ?? 4096;
@@ -97,7 +124,7 @@ export async function aiComplete(
 
 export async function aiCompleteJSON<T>(
   prompt: string,
-  options: AICompletionOptions = {}
+  options: AICompletionOptions & { role?: 'analysis' | 'generation' } = {}
 ): Promise<{ data: T; usage: { inputTokens: number; outputTokens: number } }> {
   const jsonPrompt = `${prompt}
 

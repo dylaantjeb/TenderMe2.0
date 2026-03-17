@@ -27,6 +27,7 @@ export async function buildContext(
       systemPrompt: SYSTEM_PROMPTS.contextBuilder,
       maxTokens: 4096,
       temperature: 0.2,
+      role: 'analysis',
     }
   );
 
@@ -78,6 +79,7 @@ export async function analyzeCriteria(
       systemPrompt: SYSTEM_PROMPTS.criteriaIntelligence,
       maxTokens: 8192,
       temperature: 0.1,
+      role: 'analysis',
     }
   );
 
@@ -126,6 +128,7 @@ export async function analyzeCriteria(
         systemPrompt: SYSTEM_PROMPTS.criteriaIntelligence,
         maxTokens: 4096,
         temperature: 0.2,
+        role: 'analysis',
       }
     );
 
@@ -184,6 +187,7 @@ export async function generateResponse(
       systemPrompt: SYSTEM_PROMPTS.responseGenerator,
       maxTokens: 8192,
       temperature: 0.4,
+      role: 'generation',
     }
   );
 
@@ -229,6 +233,7 @@ export async function selfScore(
       systemPrompt: SYSTEM_PROMPTS.selfScorer,
       maxTokens: 4096,
       temperature: 0.3,
+      role: 'analysis',
     }
   );
 
@@ -254,6 +259,7 @@ export async function checkCompliance(
       systemPrompt: SYSTEM_PROMPTS.complianceFilter,
       maxTokens: 8192,
       temperature: 0.1,
+      role: 'analysis',
     }
   );
 

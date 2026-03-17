@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Sparkles,
@@ -14,6 +14,7 @@ import {
   Loader2,
   ArrowRight,
   Zap,
+  AlertCircle,
 } from 'lucide-react';
 
 const PIPELINE_STEPS = [
@@ -37,8 +38,8 @@ const PIPELINE_STEPS = [
   },
   {
     id: 'scoring',
-    name: 'Zelf-Scoring',
-    description: 'Antwoorden beoordelen en itereren',
+    name: 'Zelf-Scoring & Iteratie',
+    description: 'Antwoorden beoordelen en verbeteren',
     icon: Zap,
   },
   {
@@ -49,52 +50,78 @@ const PIPELINE_STEPS = [
   },
 ];
 
+interface CriterionResult {
+  name: string;
+  score: number;
+}
+
 export default function GeneratePage() {
   const params = useParams();
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
-  const [currentStep, setCurrentStep] = useState(-1);
   const [iterations, setIterations] = useState(2);
+  const [error, setError] = useState('');
+  const [currentCriterion, setCurrentCriterion] = useState('');
+  const [completed, setCompleted] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [criterionResults, setCriterionResults] = useState<CriterionResult[]>([]);
   const [result, setResult] = useState<any>(null);
 
   async function handleGenerate() {
     setGenerating(true);
-    setCurrentStep(0);
-
-    // Simulate step progression (actual work happens server-side)
-    const stepInterval = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev >= PIPELINE_STEPS.length - 1) {
-          clearInterval(stepInterval);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 8000);
+    setError('');
+    setCriterionResults([]);
+    setResult(null);
 
     try {
-      const res = await fetch(`/api/tenders/${params.id}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maxIterations: iterations }),
-      });
+      // Keep calling the endpoint until all criteria are done
+      let done = false;
+      while (!done) {
+        const res = await fetch(`/api/tenders/${params.id}/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maxIterations: iterations }),
+        });
 
-      clearInterval(stepInterval);
-      setCurrentStep(PIPELINE_STEPS.length);
+        const data = await res.json();
 
-      const data = await res.json();
-      if (data.success) {
-        setResult(data.data);
-      } else {
-        alert(data.error);
+        if (!res.ok) {
+          setError(data.error || 'Generatie mislukt');
+          break;
+        }
+
+        if (data.done) {
+          // All criteria processed
+          done = true;
+          setResult(data.data);
+        } else {
+          // One criterion completed
+          const d = data.data;
+          setCurrentCriterion(d.criterionName);
+          setCompleted(d.completed);
+          setTotal(d.total);
+          setCriterionResults((prev) => [
+            ...prev,
+            { name: d.criterionName, score: d.score },
+          ]);
+        }
       }
-    } catch (error) {
-      clearInterval(stepInterval);
-      alert('Fout bij genereren van antwoorden');
+    } catch {
+      setError('Verbinding mislukt. Probeer het opnieuw.');
     } finally {
       setGenerating(false);
     }
   }
+
+  const progress = total > 0 ? (completed / total) * 100 : 0;
+  // Map progress to pipeline steps
+  const pipelineProgress = result
+    ? PIPELINE_STEPS.length
+    : generating && total > 0
+    ? Math.min(Math.floor((completed / total) * PIPELINE_STEPS.length) + 2, PIPELINE_STEPS.length - 1)
+    : generating
+    ? 0
+    : -1;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -107,14 +134,21 @@ export default function GeneratePage() {
         </p>
       </div>
 
+      {error && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive mb-6 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
       {/* Pipeline Visualization */}
       <Card className="mb-6">
         <CardContent className="p-6">
           <div className="space-y-4">
             {PIPELINE_STEPS.map((step, index) => {
-              const isActive = index === currentStep;
-              const isComplete = index < currentStep || (result && currentStep >= PIPELINE_STEPS.length);
-              const isPending = index > currentStep;
+              const isActive = index === pipelineProgress;
+              const isComplete = index < pipelineProgress;
+              const isPending = index > pipelineProgress;
 
               return (
                 <div
@@ -168,13 +202,51 @@ export default function GeneratePage() {
           </div>
 
           {generating && (
-            <Progress
-              value={((currentStep + 1) / PIPELINE_STEPS.length) * 100}
-              className="mt-4"
-            />
+            <div className="mt-4 space-y-2">
+              <Progress value={progress} />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  {currentCriterion
+                    ? `Criterium: ${currentCriterion}`
+                    : 'Starten...'}
+                </span>
+                <span>
+                  {completed}/{total || '?'} criteria
+                </span>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Criterion scores as they come in */}
+      {criterionResults.length > 0 && !result && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm">Tussentijdse Scores</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {criterionResults.map((cr, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="truncate flex-1">{cr.name}</span>
+                  <span
+                    className={`font-mono font-bold ${
+                      cr.score >= 8
+                        ? 'text-emerald-500'
+                        : cr.score >= 6
+                        ? 'text-blue-500'
+                        : 'text-amber-500'
+                    }`}
+                  >
+                    {cr.score.toFixed(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Configuration */}
       {!generating && !result && (
@@ -221,7 +293,7 @@ export default function GeneratePage() {
                 <div>
                   <h3 className="font-semibold text-lg">Generatie Voltooid</h3>
                   <p className="text-sm text-muted-foreground">
-                    {result.criterionScores?.length || 0} criteria beoordeeld
+                    {result.completed || criterionResults.length} criteria beoordeeld
                   </p>
                 </div>
               </div>
@@ -233,6 +305,29 @@ export default function GeneratePage() {
                   Totale score /10
                 </div>
               </div>
+
+              {/* Final scores per criterion */}
+              {criterionResults.length > 0 && (
+                <div className="mb-6 space-y-2">
+                  {criterionResults.map((cr, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm p-2 rounded-lg bg-muted/50">
+                      <span className="truncate flex-1">{cr.name}</span>
+                      <span
+                        className={`font-mono font-bold ${
+                          cr.score >= 8
+                            ? 'text-emerald-500'
+                            : cr.score >= 6
+                            ? 'text-blue-500'
+                            : 'text-amber-500'
+                        }`}
+                      >
+                        {cr.score.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <Button
                   className="flex-1"
