@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,7 @@ export default function TendersPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       const res = await fetch(`/api/tenders?${params}`);
+      if (!res.ok) return;
       const data = await res.json();
       if (data.success) setTenders(data.data);
     } catch (error) {
@@ -53,6 +54,10 @@ export default function TendersPage() {
       setLoading(false);
     }
   }, [search]);
+
+  useEffect(() => {
+    fetchTenders();
+  }, [fetchTenders]);
 
   return (
     <div>

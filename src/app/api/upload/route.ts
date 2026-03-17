@@ -111,9 +111,10 @@ export async function POST(req: NextRequest) {
       ocrApplied: parsed.metadata.ocrApplied,
     });
   } catch (error) {
-    console.error('Upload error:', error);
+    const message = error instanceof Error ? error.message : 'Onbekende fout';
+    console.error('Upload error:', message, error);
     return NextResponse.json(
-      { error: 'Er is een fout opgetreden bij het uploaden' },
+      { error: `Upload fout: ${message}` },
       { status: 500 }
     );
   }

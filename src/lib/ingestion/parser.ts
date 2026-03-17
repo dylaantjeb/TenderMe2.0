@@ -2,7 +2,7 @@ import type { ParsedDocument } from '@/types';
 
 /**
  * Document Ingestion Engine
- * Handles PDF, DOCX, and ZIP file parsing with OCR fallback
+ * Handles PDF, DOCX, and ZIP file parsing with graceful fallbacks for serverless
  */
 
 export async function parseDocument(
@@ -10,43 +10,56 @@ export async function parseDocument(
   fileName: string,
   fileType: string
 ): Promise<ParsedDocument> {
-  switch (fileType) {
-    case 'application/pdf':
-    case '.pdf':
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+
+  switch (true) {
+    case fileType === 'application/pdf' || ext === 'pdf':
       return parsePDF(buffer, fileName);
 
-    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-    case '.docx':
+    case fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'docx':
       return parseDOCX(buffer, fileName);
 
-    case 'application/zip':
-    case '.zip':
+    case fileType === 'application/zip' || ext === 'zip':
       return parseZIP(buffer, fileName);
 
-    case 'text/plain':
-    case '.txt':
+    case fileType === 'text/plain' || ext === 'txt':
       return {
         text: buffer.toString('utf-8'),
-        metadata: { fileName, fileType, ocrApplied: false },
+        metadata: { fileName, fileType: 'txt', ocrApplied: false },
       };
 
     default:
-      throw new Error(`Unsupported file type: ${fileType}`);
+      return {
+        text: buffer.toString('utf-8'),
+        metadata: { fileName, fileType: ext, ocrApplied: false },
+      };
   }
 }
 
 async function parsePDF(buffer: Buffer, fileName: string): Promise<ParsedDocument> {
   try {
+    // pdf-parse has a known issue: it tries to load a test PDF from the filesystem.
+    // We use a dynamic import with error handling for serverless safety.
     const pdfParse = (await import('pdf-parse')).default;
     const result = await pdfParse(buffer);
 
-    // Check if text extraction yielded minimal content (might need OCR)
-    if (result.text.trim().length < 100 && result.numpages > 0) {
-      return await parseWithOCR(buffer, fileName, result.numpages);
+    const text = cleanExtractedText(result.text);
+
+    if (text.length < 50 && result.numpages > 0) {
+      // Very little text extracted — likely a scanned document
+      return {
+        text: text || `[Document bevat ${result.numpages} pagina('s) maar geen selecteerbare tekst. Upload een PDF met selecteerbare tekst voor de beste resultaten.]`,
+        metadata: {
+          fileName,
+          fileType: 'pdf',
+          pageCount: result.numpages,
+          ocrApplied: false,
+        },
+      };
     }
 
     return {
-      text: cleanExtractedText(result.text),
+      text,
       metadata: {
         fileName,
         fileType: 'pdf',
@@ -55,89 +68,89 @@ async function parsePDF(buffer: Buffer, fileName: string): Promise<ParsedDocumen
       },
     };
   } catch (error) {
-    // Fallback to OCR
-    return await parseWithOCR(buffer, fileName);
+    console.error('PDF parse error:', error);
+    return {
+      text: `[PDF-verwerking mislukt voor ${fileName}. Probeer het bestand opnieuw te uploaden of converteer naar DOCX/TXT.]`,
+      metadata: {
+        fileName,
+        fileType: 'pdf',
+        ocrApplied: false,
+      },
+    };
   }
 }
 
 async function parseDOCX(buffer: Buffer, fileName: string): Promise<ParsedDocument> {
-  const mammoth = await import('mammoth');
-  const result = await mammoth.extractRawText({ buffer });
+  try {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
 
-  return {
-    text: cleanExtractedText(result.value),
-    metadata: {
-      fileName,
-      fileType: 'docx',
-      ocrApplied: false,
-    },
-  };
+    return {
+      text: cleanExtractedText(result.value),
+      metadata: {
+        fileName,
+        fileType: 'docx',
+        ocrApplied: false,
+      },
+    };
+  } catch (error) {
+    console.error('DOCX parse error:', error);
+    return {
+      text: `[DOCX-verwerking mislukt voor ${fileName}. Controleer of het bestand geldig is.]`,
+      metadata: {
+        fileName,
+        fileType: 'docx',
+        ocrApplied: false,
+      },
+    };
+  }
 }
 
 async function parseZIP(buffer: Buffer, fileName: string): Promise<ParsedDocument> {
-  const AdmZip = (await import('adm-zip')).default;
-  const zip = new AdmZip(buffer);
-  const entries = zip.getEntries();
-
-  const texts: string[] = [];
-
-  for (const entry of entries) {
-    if (entry.isDirectory) continue;
-
-    const entryName = entry.entryName.toLowerCase();
-    const entryBuffer = entry.getData();
-
-    if (entryName.endsWith('.pdf')) {
-      const parsed = await parsePDF(entryBuffer, entry.entryName);
-      texts.push(`--- ${entry.entryName} ---\n${parsed.text}`);
-    } else if (entryName.endsWith('.docx')) {
-      const parsed = await parseDOCX(entryBuffer, entry.entryName);
-      texts.push(`--- ${entry.entryName} ---\n${parsed.text}`);
-    } else if (entryName.endsWith('.txt')) {
-      texts.push(`--- ${entry.entryName} ---\n${entryBuffer.toString('utf-8')}`);
-    }
-  }
-
-  return {
-    text: texts.join('\n\n'),
-    metadata: {
-      fileName,
-      fileType: 'zip',
-      ocrApplied: false,
-    },
-  };
-}
-
-async function parseWithOCR(
-  buffer: Buffer,
-  fileName: string,
-  pageCount?: number
-): Promise<ParsedDocument> {
   try {
-    const Tesseract = await import('tesseract.js');
-    const worker = await Tesseract.createWorker('nld+eng');
+    const AdmZip = (await import('adm-zip')).default;
+    const zip = new AdmZip(buffer);
+    const entries = zip.getEntries();
 
-    // Convert PDF buffer to image-like data for OCR
-    // In production, use pdf2pic or similar for page-by-page conversion
-    const { data: { text } } = await worker.recognize(buffer);
-    await worker.terminate();
+    const texts: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+
+      const entryName = entry.entryName.toLowerCase();
+      const entryBuffer = entry.getData();
+
+      try {
+        if (entryName.endsWith('.pdf')) {
+          const parsed = await parsePDF(entryBuffer, entry.entryName);
+          texts.push(`--- ${entry.entryName} ---\n${parsed.text}`);
+        } else if (entryName.endsWith('.docx')) {
+          const parsed = await parseDOCX(entryBuffer, entry.entryName);
+          texts.push(`--- ${entry.entryName} ---\n${parsed.text}`);
+        } else if (entryName.endsWith('.txt')) {
+          texts.push(`--- ${entry.entryName} ---\n${entryBuffer.toString('utf-8')}`);
+        }
+      } catch {
+        texts.push(`--- ${entry.entryName} ---\n[Bestand kon niet worden verwerkt]`);
+      }
+    }
 
     return {
-      text: cleanExtractedText(text),
+      text: texts.join('\n\n') || `[ZIP bevat ${entries.length} bestanden maar geen verwerkte inhoud]`,
       metadata: {
         fileName,
-        fileType: 'pdf',
-        pageCount,
-        ocrApplied: true,
+        fileType: 'zip',
+        entryCount: entries.length,
+        ocrApplied: false,
       },
     };
-  } catch {
+  } catch (error) {
+    console.error('ZIP parse error:', error);
     return {
-      text: '[OCR processing unavailable - please ensure document contains selectable text]',
+      text: `[ZIP-verwerking mislukt voor ${fileName}.]`,
       metadata: {
         fileName,
-        fileType: 'pdf',
-        pageCount,
+        fileType: 'zip',
         ocrApplied: false,
       },
     };
@@ -146,16 +159,11 @@ async function parseWithOCR(
 
 function cleanExtractedText(text: string): string {
   return text
-    // Normalize whitespace
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
-    // Remove excessive blank lines
     .replace(/\n{4,}/g, '\n\n\n')
-    // Remove page numbers/headers that are just numbers
     .replace(/^\d+\s*$/gm, '')
-    // Normalize spaces
     .replace(/[ \t]{2,}/g, ' ')
-    // Trim
     .trim();
 }
 
@@ -163,7 +171,6 @@ function cleanExtractedText(text: string): string {
  * Estimate token count for a text string (rough approximation)
  */
 export function estimateTokens(text: string): number {
-  // Rough estimate: ~4 characters per token for Dutch/English
   return Math.ceil(text.length / 4);
 }
 

@@ -97,7 +97,9 @@ export interface ParsedDocument {
     fileName: string;
     fileType: string;
     pageCount?: number;
+    entryCount?: number;
     ocrApplied: boolean;
+    [key: string]: unknown;
   };
 }
 
