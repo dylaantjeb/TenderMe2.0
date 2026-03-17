@@ -11,6 +11,27 @@ import type {
 import { db } from '@/lib/db';
 
 // ============================================
+// TEXT TRUNCATION FOR API LIMITS
+// ============================================
+
+/**
+ * Truncate document text to fit within AI provider token limits.
+ * ~4 chars per token on average. We target max ~20K tokens of document text
+ * to leave room for system prompt + output tokens within rate limits.
+ */
+function truncateForAI(text: string, maxChars = 80000): string {
+  if (text.length <= maxChars) return text;
+
+  // Take first 60% and last 20% to capture intro + criteria sections (often at end)
+  const headSize = Math.floor(maxChars * 0.6);
+  const tailSize = Math.floor(maxChars * 0.2);
+  const head = text.slice(0, headSize);
+  const tail = text.slice(-tailSize);
+
+  return `${head}\n\n[... document ingekort vanwege lengte — ${Math.round(text.length / 1000)}K tekens totaal ...]\n\n${tail}`;
+}
+
+// ============================================
 // LAYER 1: CONTEXT BUILDER
 // ============================================
 
@@ -21,8 +42,10 @@ export async function buildContext(
 ): Promise<AIContextAnalysis> {
   const startTime = Date.now();
 
+  const truncatedText = truncateForAI(documentText);
+
   const { data, usage } = await aiCompleteJSON<AIContextAnalysis>(
-    EXTRACTION_PROMPTS.analyzeContext(documentText),
+    EXTRACTION_PROMPTS.analyzeContext(truncatedText),
     {
       systemPrompt: SYSTEM_PROMPTS.contextBuilder,
       maxTokens: 4096,
@@ -72,9 +95,11 @@ export async function analyzeCriteria(
 ): Promise<{ extracted: ExtractedCriteria; intelligence: CriteriaIntelligence }> {
   const startTime = Date.now();
 
-  // Extract criteria
+  // Extract criteria (truncate text to fit within rate limits)
+  const truncatedText = truncateForAI(documentText);
+
   const { data: extracted, usage: extractUsage } = await aiCompleteJSON<ExtractedCriteria>(
-    EXTRACTION_PROMPTS.extractCriteria(documentText),
+    EXTRACTION_PROMPTS.extractCriteria(truncatedText),
     {
       systemPrompt: SYSTEM_PROMPTS.criteriaIntelligence,
       maxTokens: 8192,
